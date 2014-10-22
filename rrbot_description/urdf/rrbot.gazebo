@@ -1,12 +1,17 @@
 <?xml version="1.0"?>
 <robot>
 
-  <!-- ros_control plugin -->
+  <!-- gravity compensation plugin -->
   <gazebo>
-    <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so">
-      <robotNamespace>/rrbot</robotNamespace>
-    </plugin>
+    <plugin name="gravity_control" filename="librrbot_gravity.so"/>
   </gazebo>
+
+  <!-- ros_control plugin -->
+  <!-- <gazebo> -->
+  <!--   <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so"> -->
+  <!--     <robotNamespace>/rrbot</robotNamespace> -->
+  <!--   </plugin> -->
+  <!-- </gazebo> -->
 
   <!-- Link1 -->
   <gazebo reference="link1">

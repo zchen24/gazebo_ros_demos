@@ -7,6 +7,7 @@
 #include <ros/package.h>
 #include <std_msgs/Int16.h>
 #include <std_msgs/Bool.h>
+#include <std_msgs/Empty.h>
 #include <sensor_msgs/JointState.h>
 
 // KDL
@@ -47,10 +48,11 @@ public:
 
     // ROS Nodehandle
     this->node = new ros::NodeHandle("~");
-    this->pub = this->node->advertise<std_msgs::Int16>("/gravity/pub", 100);
+    this->pubJntStates = this->node->advertise<sensor_msgs::JointState>("/gravity/joint_states", 1000);
     this->sub = this->node->subscribe("/gravity/sub", 100, &GravityCompensation::callback, this);
     subJointDesired = node->subscribe("/gravity/joint_cmd", 100, &GravityCompensation::JointDesiredCallback, this);
     subPIDSwitch = node->subscribe("/gravity/pid_switch", 100, &GravityCompensation::PIDSwitchCallback, this);
+    subCollect = node->subscribe("/gravity/collect", 100, &GravityCompensation::CollectCallback, this);
 
     // Store the pointer to the model
     this->model = _parent;//    RRBotKd
@@ -86,23 +88,6 @@ public:
     q_err_sum.SetSize(mNumJnts);
     q_err_sum.SetAll(0.0);
 
-
-    // KDL
-    // kdlRRBot
-//    KDL::Tree kdlTree;
-//    std::string urdfFileName = ros::package::getPath("rrbot_description");
-//    urdfFileName.append("/urdf/rrbot.urdf");
-//    if (!kdl_parser::treeFromFile(urdfFileName, kdlTree)) {
-//      ROS_ERROR_STREAM("KDL: Failed to load RRBot from urdf file"
-//                       << urdfFileName);
-//    } else {
-//      ROS_INFO("KDL: loaded rrbot KDL tree");
-//    }
-
-//    kdlTree.getChain("world", "link3", RRBotKdl);
-//    ROS_INFO_STREAM(" num of segments = " << RRBotKdl.getNrOfSegments());
-
-
     // KDL from DH parameters
     // a, alpha, d, theta
     // m, com, RotationInertia(ixx, iyy, izz, ixy, ixz, iyz)
@@ -110,10 +95,12 @@ public:
 
     inert = KDL::RigidBodyInertia(1.0, KDL::Vector(-0.45, 0, 0), KDL::RotationalInertia(1, 1, 1, 0, 0, 0));
     RRBotKdl.addSegment(KDL::Segment(KDL::Joint(KDL::Joint::RotZ), KDL::Frame::DH(0.9, 0.0, 0.0, 0.0), inert));
-    RRBotKdl.addSegment(KDL::Segment(KDL::Joint(KDL::Joint::RotZ), KDL::Frame::DH(0.9, 0.0, 0.1, 0.0), inert));
+    RRBotKdl.addSegment(KDL::Segment(KDL::Joint(KDL::Joint::RotZ), KDL::Frame::DH(0.9, 0.0, 0.1, 0.0), inert));   
 
     // ---- PID -----
-    pidEnabled = false;
+    pidEnabled = true;
+    gcEnabled = true;
+    collectEnabled = false;
   }
 
   // Called by the world update start event
@@ -177,16 +164,20 @@ public:
         if (q_err_sum[i] > err_sum_limit) q_err_sum[i] = err_sum_limit;
         else if (q_err_sum[i] < -err_sum_limit) q_err_sum[i] = -err_sum_limit;
       }
+      tau += taupid;
+    }
+    if (gcEnabled) tau += taugc;
+
+    if (collectEnabled) {
+        tau[0] = -0.6;
+        tau[1] = -0.1;
     }
 
-    // apply gc torque to Robot
-//    tau = taugc + taupid;
-    tau = taupid;
     this->model->GetJoint("joint1")->SetForce(0, tau[0]);
     this->model->GetJoint("joint2")->SetForce(0, tau[1]);
 
 #if 1
-    if (count%200 == 0) {
+    if (count%500 == 0) {
       vctQuatRot3 rotQuat(fkCisst.Rotation(), VCT_NORMALIZE);
       double x, y, z, w;
       fkKDL.M.GetQuaternion(x, y, z, w);
@@ -208,10 +199,17 @@ public:
                       << "tau gc = " << jnt_taugc << std::endl;
                       );
 
-      std_msgs::Int16 msg;
-      msg.data = 5;
-      pub.publish(msg);
+//      std_msgs::Int16 msg;
+//      msg.data = 5;
+//      pub.publish(msg);
     }
+
+    sensor_msgs::JointState msg;
+    msg.header.stamp = ros::Time::now();
+    msg.position.clear(); msg.effort.clear();
+    msg.position.push_back(q[0]); msg.position.push_back(q[1]);
+    msg.effort.push_back(tau[0]); msg.effort.push_back(tau[1]);
+    pubJntStates.publish(msg);
 #endif
 
   }
@@ -243,6 +241,11 @@ public:
     else ROS_INFO("PID OFF");
   }
 
+  void CollectCallback(const std_msgs::Empty &msg)
+  {
+      collectEnabled = !collectEnabled;
+  }
+
 private:
   // Pointer to the model
   physics::ModelPtr model;
@@ -256,13 +259,16 @@ private:
 
   // ROS
   ros::NodeHandle* node;
-  ros::Publisher pub;
+  ros::Publisher pubJntStates;
   ros::Subscriber sub;
   ros::Subscriber subJointDesired;
   ros::Subscriber subPIDSwitch;
+  ros::Subscriber subCollect;
 
   // Robot Control
   bool pidEnabled;      // pid enable switch
+  bool gcEnabled;       // gc enable switch
+  bool collectEnabled;  // collect enable switch
   vctDoubleVec q_des;   // desired joint position
   vctDoubleVec q_err_sum;  // sum of error
 };
