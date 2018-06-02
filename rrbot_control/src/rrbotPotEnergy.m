@@ -17,13 +17,13 @@ m2 = 1.0;
 
 com1 = [0, 0, height2/2-axel_offset]';
 com2 = [0, 0, height3/2-axel_offset]';
+g = [0, 0, 9.81']';
 
 T01 = troty(q(1));
 T12 = transl([0, width, height2-axel_offset*2]) * troty(q(2));
 
 
 % compute start / end potential energy 
-g = [0, 0, 9.81']';
 U1 = g' * (transl(T01) + t2r(T01) * com1) * m1;
 
 T02 = T01 * T12;

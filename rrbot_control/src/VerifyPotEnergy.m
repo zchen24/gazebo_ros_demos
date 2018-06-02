@@ -19,9 +19,9 @@ apos = [jnts_array.position];
 avel = [jnts_array.velocity];
 atrq = [jnts_array.effort];
 
-atime = [];
+atime = zeros(1, length(jnts));
 for i = 1:length(jnts)
-    atime = [atime jnts{i}.header.stamp.time];
+    atime(i) = jnts{i}.header.stamp.time;
 end
 
 figure; 

@@ -8,6 +8,7 @@ from PyKDL import *
 from std_msgs.msg import Float64
 from sensor_msgs.msg import JointState
 import rosbag
+import roslaunch
 
 
 class RRbotController(object):
@@ -35,6 +36,10 @@ class RRbotController(object):
         else:
             self.bag = None
         self.state = None
+        self.ps_bag = None
+
+        self.launch = roslaunch.scriptapi.ROSLaunch()
+        self.launch.start()
 
     def __del__(self):
         self.close()
@@ -75,6 +80,20 @@ class RRbotController(object):
                 self.jnt_pubs[j].publish(jnt_trajectories[j][i])
                 rospy.sleep(period)
 
+    def move_joint_and_log(self, jnt_cmd, log_name="tmp.bag"):
+
+        # start bag
+        bag_node = roslaunch.core.Node('rosbag', 'record',
+                                       args='-a -O {}'.format(log_name))
+        # bag_node = roslaunch.core.Node('rosbag', 'record',
+        #                                args='-a', output='screen')
+
+
+        self.ps_bag = self.launch.launch(bag_node)
+        self.move_joint(jnt_cmd)
+
+        rospy.sleep(5.0)
+        self.ps_bag.stop()
 
     def callback_joint_states(self, msg):
         self.state = msg
